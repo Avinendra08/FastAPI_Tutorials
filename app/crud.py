@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException , Response , status
 from fastapi.params import Body
 from pydantic import BaseModel
 from random import randrange
 from sqlmodel import Session
-from . import models
+from . import models , schemas
 from .database import  engine , get_db
 
 
@@ -29,13 +29,13 @@ app = FastAPI()
 
 #pydantic schema : basemodel
 # title str , content str
-class Post(BaseModel):
-    title: str
-    content: str
-    published: bool = True
+# class Post(BaseModel):
+#     title: str
+#     content: str
+#     published: bool = True
 
-    class Config:
-        extra = "forbid"
+#     class Config:
+#         extra = "forbid"
 
 # my_posts = [{"id":1 , "title":"movie" , "content":"horror"},
 #              {"id":2 , "title":"book" , "content":"biography"}]
@@ -50,28 +50,39 @@ class Post(BaseModel):
 #         if p['id'] == id:
 #             return i
         
+@app.get("/")
+def root():
+    return {"message":"Hey!!"}
 
-@app.get("/posts")
+
+##get all posts
+@app.get("/posts" ,status_code = status.HTTP_200_OK , response_model= List[schemas.PostResponse])
 def get_posts(db : Session = Depends(get_db)):
     posts = db.query(models.Post).all()
-    return {"data":posts}
+    return posts
 
-@app.post("/posts",status_code = status.HTTP_201_CREATED)
-def createPost(post : Post , db: Session = Depends(get_db)):
+
+##create a post
+@app.post("/posts",status_code = status.HTTP_201_CREATED , response_model= schemas.PostResponse)
+def createPost(post : schemas.PostCreate , db: Session = Depends(get_db)):
     new_post = models.Post(**post.dict())
     db.add(new_post)
     db.commit()
     db.refresh(new_post)  # get newly created row with ID
-    return {"data": new_post}
+    return new_post
 
-@app.get("/posts/latest")
+
+##get latest post
+@app.get("/posts/latest" ,status_code = status.HTTP_200_OK, response_model= schemas.PostResponse)
 def get_latest_post(db: Session = Depends(get_db)):
     latest_post = db.query(models.Post).order_by(models.Post.id.desc()).first()
-    return {"data": latest_post}
+    return latest_post
 
 #in the route just above and just below, order matters
 
-@app.get("/posts/{id}")
+
+##get a post by id
+@app.get("/posts/{id}" ,status_code = status.HTTP_200_OK , response_model= schemas.PostResponse)
 def get_post(id: int,response: Response, db: Session = Depends(get_db)):
     post_query = db.query(models.Post).filter(models.Post.id == id)
     db_post = post_query.first()
@@ -81,11 +92,11 @@ def get_post(id: int,response: Response, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} not found"
         )
-    return {"post": db_post}
+    return db_post
     # response.status_code = status.HTTP_404_NOT_FOUND
     
 
-
+##delete a post
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id: int, db: Session = Depends(get_db)):
     post_query = db.query(models.Post).filter(models.Post.id == id)
@@ -103,8 +114,9 @@ def delete_post(id: int, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.put("/posts/{id}")
-def update_post(id: int, post: Post , db: Session = Depends(get_db)):
+##update a post
+@app.put("/posts/{id}" ,status_code = status.HTTP_200_OK , response_model= schemas.PostResponse)
+def update_post(id: int, post: schemas.PostCreate , db: Session = Depends(get_db)):
     post_query = db.query(models.Post).filter(models.Post.id == id)
     db_post = post_query.first()
 
@@ -117,4 +129,4 @@ def update_post(id: int, post: Post , db: Session = Depends(get_db)):
     post_query.update(post.dict(), synchronize_session=False)
     db.commit()
 
-    return {"data": post_query.first()}
+    return post_query.first()
